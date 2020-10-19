@@ -1,64 +1,103 @@
-import cv2
-from math import cos, sin, radians,sqrt
-import numpy as np
+import sys
+import os
+import glob
+
+from PyQt5.QtWidgets import QApplication, QWidget, QMessageBox, QListWidgetItem, QListWidget, QLabel, QMainWindow, QHBoxLayout
+from PyQt5.QtGui import *
+from PyQt5.QtCore import *
 
 
 
-def init_triangle(length, center):
+class Display_images(QThread):
 
-    dist = length * 2/sqrt(3)
-    y_cen, x_cen = center
+    finished = pyqtSignal(str)
 
-    # p1 = (int(y_cen - dist),     int(x_cen))
-    # p2 = (int(y_cen + 0.5*dist), int(x_cen - sqrt(3)/2 * dist))
-    # p3 = (int(y_cen + 0.5*dist), int(x_cen + sqrt(3)/2 * dist))
+    def __init__(self, root_dir, filelist, delay):
+        super().__init__()
 
-    p1 = (int(x_cen), int(y_cen - dist),)
-    p2 = (int(x_cen - sqrt(3)/2 * dist), int(y_cen + 0.5*dist))
-    p3 = (int(x_cen + sqrt(3)/2 * dist), int(y_cen + 0.5*dist))
-
-    return [p1, p2, p3]
+        os.chdir(root_dir)
+        self.filelist = filelist
+        self.idx = 0
+        self.delay = delay
 
 
-
-
-
-
-
+    def run(self):
+        while self.idx < len(self.filelist):
+            new_filename = self.filelist[self.idx]
+            self.idx += 1
+            self.finished.emit(new_filename)                 # update_img_list 함수라고 보면 됨.
+            self.msleep(self.delay)
 
 
 
+class MyApp(QWidget):
+
+    def __init__(self, root_dir, img_type='png', delay=100):
+        super().__init__()
+
+        #os.chdir("/your/root/path")
+        os.chdir(root_dir)
+
+        self.root_dir = root_dir
+        self.filelist = glob.glob("*." + img_type)
+        self.idx = 0
+        self.delay = delay
+
+        self.displayer = Display_images(self.root_dir, self.filelist, self.delay)
+        self.displayer.finished.connect(self.update_img_list)          # QThread 함수가 끝날 시, 발생 이벤트를 self.update_img_list 로.
 
 
+        self.listWidget = QListWidget()
+        self.listWidget.setFixedSize(200, 400)
+        self.listWidget.itemClicked.connect(self.imshow_file)
+        self.layout = QHBoxLayout()
+        self.lbl_img = QLabel()
+
+        self.btn1_clicked()
 
 
+    def imshow_file(self):
+        curr_filename = self.listWidget.currentItem().text()
+
+        it1 = QListWidgetItem(curr_filename)
+        pixmap = QPixmap(curr_filename)
+        pixmap = pixmap.scaledToWidth(300)
+
+        self.lbl_img.setPixmap(pixmap)
+        self.lbl_img.setAlignment(Qt.AlignCenter)
+
+        self.listWidget.addItem(it1)
+        self.layout.addWidget(self.lbl_img)
 
 
-def Rotated_points(points, degree, scale, center):
-    x_cen, y_cen = center
+    def update_img_list(self, filename):
 
-    p_new = []
-    for i in range(len(points)):
-        x, y = points[i]
-        x_ = int(scale * ((x-x_cen)*cos(radians(degree)) - (y-y_cen)*sin(radians(degree))) + x_cen)
-        y_ = int(scale * ((x-x_cen)*sin(radians(degree)) + (y-y_cen)*cos(radians(degree))) + y_cen)
+        it1 = QListWidgetItem(filename)
+        pixmap = QPixmap(filename)
+        pixmap = pixmap.scaledToWidth(300)
 
-        p_new.append((x_, y_))
+        self.lbl_img.setPixmap(pixmap)
+        self.lbl_img.setAlignment(Qt.AlignCenter)
 
-    return p_new
+        self.listWidget.addItem(it1)
+        self.listWidget.insertItem(self.idx, filename)
+
+        self.layout.addWidget(self.listWidget)
+        self.layout.addWidget(self.lbl_img)
+
+        self.setLayout(self.layout)
+
+        self.idx += 1
+        self.resize(500, 450)
+        if self.idx == len(self.filelist) - 1:
+            QMessageBox.about(self, "Message Box", "All ImageName Ready ~!")
+
+        self.show()
 
 
-
-
-
-def draw_lines(img, points):
-
-    for i in range(len(points)-1):
-        p1 = points[i]
-        p2 = points[i+1]
-        img = cv2.line(img, p1, p2, 255, 1)
-
-    return img
+    # 이미지 로드 버튼 클릭 이벤트 처리 --------------------
+    def btn1_clicked(self):
+        self.displayer.start()
 
 
 
@@ -66,22 +105,13 @@ def draw_lines(img, points):
 
 if __name__ == '__main__':
 
-    img = np.zeros((512, 512))
-    points = init_triangle(100, (256, 256))
+   root_dir = "﻿/your/root/path"
+   img_type = 'png'
+   delay = 100  # ms
+
+   app = QApplication(sys.argv)
+   ex = MyApp(root_dir, img_type, delay)
+   sys.exit(app.exec_())
 
 
 
-
-    all_points = []
-    all_points += points
-    iter_num = 50
-
-    for _ in range(iter_num):
-        points = Rotated_points(points, degree=-3, scale=1.05, center=(256,256))
-        all_points += points
-        img = draw_lines(img, all_points)
-
-
-    cv2.imshow('image', img)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
